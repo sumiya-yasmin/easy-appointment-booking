@@ -17,14 +17,13 @@
 //using library express
 
 const express = require('express')
-const dotenv = require('dotenv')
 const connectDB = require('./db')
+const config = require('./config')
 
 const app = express()
 
-dotenv.config()
 
-const port= process.env.PORT
+const port= config.PORT
 connectDB()
 app.get('/', (req, res) => {
   res.send('Hello World!')
