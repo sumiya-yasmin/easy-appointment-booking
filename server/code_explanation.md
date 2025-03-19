@@ -202,4 +202,261 @@ module.exports = User;
           - `bcrypt.compare(candidatePassword, this.password)` compares the candidatePassword with the stored hashed password (this.password).
           - It returns true if the passwords match, and false otherwise.
 
+### Zod Schema (Backend):
+   - This schema should validate the incoming data from the user.
+   - It should mirror the required fields from your Mongoose schema that the user provides.
+   - You can add extra validation rules (e.g., minimum length, email format).
+   - It is not required for the Zod schema to match the mongoose schema exactly. For example, the created at and updated at fields will not be validated by Zod, as those are backend generated.
 
+```
+npm install zod
+```
+` const signupSchema = z.object({...})` : This is zod validation syntax.
+
+`.refine()` :
+
+
+  - Cross-Field Validation: It allows you to validate relationships between multiple fields in your data.
+  - Custom Logic: You can use any JavaScript logic within the validation function, giving you great flexibility.
+  - Clear Error Messages: You can provide specific error messages and associate them with the relevant fields.
+  - Clean Code: It keeps your validation logic organized and readable.
+
+`.refine(data => data.password === data.confirmPassword, { ... })`:
+   - This is where the cross-field validation happens.
+   - data => data.password === data.confirmPassword:
+       - This is the validation function.
+       - It takes the entire data object (which contains all the fields) as input.
+       - It checks if the password field is strictly equal to the confirmPassword field.
+       - If they are equal, the validation passes; otherwise, it fails.
+   - `{ message: 'Passwords do not match', path: ['confirmPassword'] }`:
+       - This is the error configuration.
+       - message: 'Passwords do not match': This is the error message that will be returned if the validation fails.
+       - path: ['confirmPassword']: This specifies which field the error should be associated with. In this case, it's the confirmPassword field. This is important for frontend frameworks, as it allows you to display the error message next to the correct input field.
+
+### A validation middleware needed for zod schema
+
+- To build a robust and reliable backend applications, a validation middleware is crucial. the `validateRequest` middleware acts as a gatekeeper, ensuring that only valid data is allowed to pass through to the application's core logic. 
+
+- Centralized Validation:
+   - It allows you to centralize your validation logic in one place.
+   - You can reuse the validateRequest middleware across multiple routes, ensuring consistent validation.
+
+- Clean Route Handlers:
+    - It keeps your route handlers clean and focused on business logic.
+    - Route handlers don't need to worry about validation details.
+- Data Integrity:
+    - It ensures that only valid data reaches your route handlers and database.
+    - This helps prevent errors, security vulnerabilities, and data corruption.
+
+- Separation of Concerns:
+   - It adheres to the principle of separation of concerns, which is a fundamental concept in software engineering.
+   - Validation logic is separated from route handling logic.
+
+- Error Handling:
+   - It provides a consistent way to handle validation errors.
+   - It formats Zod errors into a user-friendly format, making it easier for clients to understand and fix the issues.
+
+```
+const validateRequest = (schema) =>{
+    return (req,res,next) =>{
+        try {
+            schema.parse(req.body)
+            next()
+        } catch (error) {
+            if(error instanceof z.ZodError){
+                const formattedErrors = error.errors.map( err=> ({
+                    path: err.path.join('.'),
+                    message: err.message
+                }))
+                return res.status(400).json({ 
+                    error: 'Validation failed', 
+                    details: formattedErrors 
+                  });
+            }
+        }
+    }
+}
+```
+- We're creating a middleware function that takes a Zod schema as input.
+- It validates the request body against the schema.
+- If validation passes, it calls the next middleware.
+- If validation fails, it formats the error messages and returns a 400 response.
+
+`const validateRequest = (schema) => { ... }`:
+
+- This defines a function named validateRequest.
+- It takes a single argument, schema, which is expected to be a Zod schema object.
+- This function returns another function (a middleware function).
+
+`return (req, res, next) => { ... }`:
+
+- This is the middleware function that will be executed when a request is made to a route that uses this middleware.
+- req: The request object, containing information about the incoming HTTP request.
+- res: The response object, used to send responses back to the client.
+- next: A function that, when called, passes control to the next middleware in the chain or to the route handler.
+
+`try { schema.parse(req.body); next(); }`:
+
+- `schema.parse(req.body)`:
+
+ - This is the core validation step.
+ - It uses the `parse()` method of the Zod schema to validate the request body `(req.body)`.
+ - If req.body conforms to the schema, `parse()` returns the parsed data.
+ - If req.body does not conform to the schema, `parse()` throws a ZodError.
+
+- `next();`:
+
+ - If the validation is successful (no ZodError is thrown), `next()` is called.
+ - This passes control to the next middleware or the route handler, allowing the request to proceed.
+
+`catch (error) { ... }`:
+
+- This catch block handles the ZodError that is thrown when validation fails.
+
+- `const formattedErrors = error.errors.map(err => ({ ... }))`:
+
+  - `error.errors:` This is an array of Zod error objects, each describing a specific validation failure.
+  - `map()`: This iterates over the error.errors array and transforms each error object into a more user-friendly format.
+  - `path: err.path.join('.')`:
+  - `err.path`: This is an array of keys representing the path to the invalid field (e.g., ['user', 'email']).
+  - `join('.')`: This converts the path array into a dot-separated string (e.g., "user.email").
+  - `message: err.message`:
+    - This extracts the error message from the Zod error object.
+
+ - `return res.status(400).json({ ... })`;:
+  - This sends a 400 (Bad Request) response to the client.
+  - `error: 'Validation failed'`: A general error message.
+  - `details: formattedErrors`: The array of formatted error messages, providing specific details about the validation failures.
+###
+The roles of routers, controllers, and services in a well-structured backend application.
+  services -> controllers -> routers
+
+#### Key Benefits of This Structure:
+
+- Separation of Concerns: Each layer has a specific responsibility.
+- Maintainability: Changes to one layer are less likely to affect other layers.
+- Testability: Services can be easily tested independently.
+= Reusability: Services can be reused across different parts of your application.
+- Scalability: The architecture supports scaling your application as it grows.
+
+#### 1. Routers (Express.js)
+
+##### Role:
+- Routers are responsible for handling HTTP requests and routing them to the appropriate controller functions.
+- They define the API endpoints (URLs) and the HTTP methods (GET, POST, PUT, DELETE) that are allowed.
+- They often include middleware for authentication, authorization, and validation.
+
+- What to Keep There:
+  - Route definitions (e.g., router.get('/users', ...)).
+  - Middleware functions (e.g., authentication, validation).
+  - Calls to controller functions.
+  - Essentially, routing logic.
+
+Example:
+// routes/userRouter.js
+```
+const express = require('express');
+const router = express.Router();
+const userController = require('../controllers/userController');
+const validateRequest = require('../middleware/validateRequest');
+const { userRegistrationSchema, userLoginSchema } = require('../validations/userValidation');
+
+router.post('/register', validateRequest(userRegistrationSchema), userController.registerUser);
+router.post('/login', validateRequest(userLoginSchema), userController.loginUser);
+router.get('/profile', userController.getUserProfile);
+
+module.exports = router;
+```
+#### 2. Controllers
+
+##### Role:
+- Controllers act as intermediaries between the routers and the services.
+- They receive requests from the routers, process the request data, and call the appropriate service functions.
+- They handle request/response logic.
+- They are responsible for preparing the response data and sending it back to the client.
+
+- What to Keep There:
+  - Request handling logic (e.g., extracting data from req.body, req.params, req.query).
+  - Calls to service functions.
+  - Response formatting and sending.
+  - Error handling related to request/response.
+
+Example:
+// controllers/userController.js
+```
+const userService = require('../services/userService');
+
+const registerUser = async (req, res) => {
+  try {
+    const user = await userService.registerUser(req.body);
+    res.status(201).json(user);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const loginUser = async (req, res) => {
+    try{
+        const token = await userService.loginUser(req.body);
+        res.status(200).json({token: token});
+    } catch (error){
+        res.status(401).json({error: error.message});
+    }
+};
+
+const getUserProfile = async (req, res) => {
+  try {
+    // ... get user from database via service.
+    res.status(200).json(user);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+module.exports = { registerUser, loginUser, getUserProfile };
+```
+#### 3. Services
+
+##### Role:
+- Services contain the core business logic of your application.
+- They interact with the data layer (e.g., databases, external APIs).
+- They perform data manipulation, validation, and other business operations.
+- They are independent of the HTTP layer, making them reusable and testable.
+
+- What to Keep There:
+  - Database interactions (e.g., Mongoose queries).
+  - Data processing and transformation.
+  - Business logic and rules.
+  - Calls to other services or external APIs.
+
+Example:
+JavaScript
+
+// services/userService.js
+```
+const User = require('../models/user');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+
+const registerUser = async (userData) => {
+  const hashedPassword = await bcrypt.hash(userData.password, 10);
+  const user = new User({ ...userData, password: hashedPassword });
+  await user.save();
+  return user;
+};
+
+const loginUser = async (loginData) =>{
+    const user = await User.findOne({email: loginData.email});
+    if(!user){
+        throw new Error("Invalid Credentials");
+    }
+    const passwordMatch = await bcrypt.compare(loginData.password, user.password);
+    if(!passwordMatch){
+        throw new Error("Invalid Credentials");
+    }
+    const token = jwt.sign({userId: user._id}, process.env.JWT_SECRET);
+    return token;
+};
+
+module.exports = { registerUser, loginUser };
+```
